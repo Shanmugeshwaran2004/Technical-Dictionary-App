@@ -1,1 +1,1 @@
-CSE Dictionary Project
+echo "# Technical Dictionary App" 
