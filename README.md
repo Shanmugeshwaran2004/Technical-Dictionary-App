@@ -1,6 +1,6 @@
 # technical_dictionary
 
-A new Flutter project.
+A technical dictionary app built with Flutter.
 
 ## Getting Started
 
