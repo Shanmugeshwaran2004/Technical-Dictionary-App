@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'word_model.dart'; // This imports your DictionaryWord class
+
+// Import your other files
+import 'word_model.dart';
+import 'word_list_page.dart';
+import 'add_word_page.dart';
+import 'quiz_page.dart';
 
 void main() async {
-  // 1. Ensure Flutter is ready for async code
+  // 1. Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Initialize Hive and Register the Adapter
+  // 2. Initialize Hive for local storage
   await Hive.initFlutter();
+
+  // 3. Register the generated TypeAdapter for DictionaryWord
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(DictionaryWordAdapter());
   }
 
-  // 3. Open the storage box
+  // 4. Open the database "box"
   await Hive.openBox<DictionaryWord>('dictionaryBox');
 
   runApp(const MyApp());
@@ -27,7 +34,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Technical Dictionary',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
         useMaterial3: true,
       ),
       home: const DomainListPage(),
@@ -38,7 +45,7 @@ class MyApp extends StatelessWidget {
 class DomainListPage extends StatelessWidget {
   const DomainListPage({super.key});
 
-  // Your requested domains
+  // Your specified domains for CSE and AIML
   final List<String> domains = const [
     "AI", "ML", "DL", "CN", "CV", "DBMS", "OS", "Python", "Java", "NLP", "DS"
   ];
@@ -47,37 +54,66 @@ class DomainListPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Technical Dictionary'),
+        title: const Text('CSE & AIML Dictionary'),
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        actions: [
+          // Button to go to the "Add Word" page to enter data
+          IconButton(
+            tooltip: "Add New Word",
+            icon: const Icon(Icons.add_circle),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AddWordPage()),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: domains.length,
         itemBuilder: (context, index) {
           return Card(
-            elevation: 2,
+            elevation: 3,
+            margin: const EdgeInsets.symmetric(vertical: 6),
             child: ListTile(
-              leading: const Icon(Icons.book),
+              leading: CircleAvatar(
+                backgroundColor: Colors.blue[100],
+                child: Text(domains[index][0]), // Shows first letter
+              ),
               title: Text(
                 domains[index],
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
+              subtitle: const Text("Tap to view words"),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
-                // Next step: Navigate to a word list filtered by this domain
-                print("Selected domain: ${domains[index]}");
+                // Navigate to Word List page filtered by this domain
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WordListPage(domain: domains[index]),
+                  ),
+                );
               },
             ),
           );
         },
       ),
+      // Floating Action Button to start the Quiz
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Next step: Navigate to Quiz page
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const QuizPage()),
+          );
         },
-        label: const Text('Take Quiz'),
-        icon: const Icon(Icons.quiz),
+        label: const Text('Start Quiz'),
+        icon: const Icon(Icons.psychology),
+        backgroundColor: Colors.blueAccent,
+        foregroundColor: Colors.white,
       ),
     );
   }
