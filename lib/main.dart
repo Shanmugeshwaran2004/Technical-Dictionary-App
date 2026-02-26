@@ -1,27 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
-// Import your other files
+import 'package:csv/csv.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'word_model.dart';
 import 'word_list_page.dart';
-import 'add_word_page.dart';
 import 'quiz_page.dart';
 
 void main() async {
-  // 1. Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 2. Initialize Hive for local storage
   await Hive.initFlutter();
-
-  // 3. Register the generated TypeAdapter for DictionaryWord
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(DictionaryWordAdapter());
   }
-
-  // 4. Open the database "box"
   await Hive.openBox<DictionaryWord>('dictionaryBox');
-
   runApp(const MyApp());
 }
 
@@ -32,88 +23,92 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Technical Dictionary',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
       home: const DomainListPage(),
     );
   }
 }
 
-class DomainListPage extends StatelessWidget {
+class DomainListPage extends StatefulWidget {
   const DomainListPage({super.key});
 
-  // Your specified domains for CSE and AIML
-  final List<String> domains = const [
-    "AI", "ML", "DL", "CN", "CV", "DBMS", "OS", "Python", "Java", "NLP", "DS"
-  ];
+  @override
+  State<DomainListPage> createState() => _DomainListPageState();
+}
+
+class _DomainListPageState extends State<DomainListPage> {
+  bool _isLoading = false;
+  // Note: "java" is lowercase here to match your CSV perfectly
+  final List<String> domains = ["AI", "ML", "DL", "CN", "CV", "DBMS", "OS", "Python", "java", "NLP", "DS"];
+
+  Future<void> _clearAndReimport() async {
+    final box = Hive.box<DictionaryWord>('dictionaryBox');
+    setState(() => _isLoading = true);
+    await box.clear();
+
+    try {
+      final rawData = await rootBundle.loadString("assets/data.csv");
+      List<List<dynamic>> csvTable = const CsvToListConverter().convert(rawData);
+
+      for (var i = 1; i < csvTable.length; i++) {
+        final row = csvTable[i];
+        if (row.length >= 8) {
+          final newWord = DictionaryWord(
+            englishWord: row[0].toString().trim(),
+            tamilWord: row[1].toString().trim(),
+            englishDef: row[2].toString().trim(),
+            englishExample: row[3].toString().trim(), // Index 3 is English Example
+            tamilDef: row[4].toString().trim(),     // Index 4 is Tamil Definition
+            tamilExample: row[5].toString().trim(),
+            imageUrl: row[6].toString().trim(),
+            domainName: row[7].toString().trim(),
+          );
+          await box.add(newWord);
+        }
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Imported ${box.length} words successfully!")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final box = Hive.box<DictionaryWord>('dictionaryBox');
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CSE & AIML Dictionary'),
-        centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        title: const Text('Technical Dictionary'),
         actions: [
-          // Button to go to the "Add Word" page to enter data
+          Center(child: Text("Total: ${box.length} ", style: const TextStyle(fontWeight: FontWeight.bold))),
           IconButton(
-            tooltip: "Add New Word",
-            icon: const Icon(Icons.add_circle),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddWordPage()),
-              );
-            },
-          ),
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _clearAndReimport,
+          )
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
         itemCount: domains.length,
         itemBuilder: (context, index) {
-          return Card(
-            elevation: 3,
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.blue[100],
-                child: Text(domains[index][0]), // Shows first letter
-              ),
-              title: Text(
-                domains[index],
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              subtitle: const Text("Tap to view words"),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                // Navigate to Word List page filtered by this domain
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => WordListPage(domain: domains[index]),
-                  ),
-                );
-              },
-            ),
+          // Displaying "Java" nicely while matching "java" internally
+          String displayName = domains[index] == "java" ? "Java" : domains[index];
+          return ListTile(
+            leading: const Icon(Icons.folder_open, color: Colors.blue),
+            title: Text(displayName),
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (context) => WordListPage(domain: domains[index])
+            )),
           );
         },
       ),
-      // Floating Action Button to start the Quiz
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const QuizPage()),
-          );
-        },
-        label: const Text('Start Quiz'),
-        icon: const Icon(Icons.psychology),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const QuizPage())),
+        label: const Text("Take Quiz"),
+        icon: const Icon(Icons.quiz),
       ),
     );
   }

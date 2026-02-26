@@ -11,155 +11,157 @@ class QuizPage extends StatefulWidget {
 }
 
 class _QuizPageState extends State<QuizPage> {
+  final TextEditingController _countController = TextEditingController(text: "5");
   String _selectedDomain = "AI";
-  int _questionCount = 5;
   bool _quizStarted = false;
 
   List<DictionaryWord> _quizWords = [];
   int _currentIndex = 0;
   int _score = 0;
-  List<String> _currentOptions = [];
+  List<String> _options = [];
+  String? _selectedOption;
+  bool _isAnswered = false;
 
   final List<String> _domains = ["AI", "ML", "DL", "CN", "CV", "DBMS", "OS", "Python", "Java", "NLP", "DS"];
 
   void _startQuiz() {
     final box = Hive.box<DictionaryWord>('dictionaryBox');
-    List<DictionaryWord> allDomainWords = box.values
+    int requestedCount = int.tryParse(_countController.text) ?? 5;
+
+    List<DictionaryWord> domainWords = box.values
         .where((w) => w.domainName == _selectedDomain)
         .toList();
 
-    if (allDomainWords.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Add at least 4 words to this domain to start a quiz!")),
-      );
+    if (domainWords.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Add more words to this domain first!")));
       return;
     }
 
-    allDomainWords.shuffle();
-    _quizWords = allDomainWords.take(_questionCount).toList();
+    domainWords.shuffle();
+    _quizWords = domainWords.take(requestedCount).toList();
 
     setState(() {
       _quizStarted = true;
       _currentIndex = 0;
       _score = 0;
+      _isAnswered = false;
       _generateOptions();
     });
   }
 
   void _generateOptions() {
     final box = Hive.box<DictionaryWord>('dictionaryBox');
-    String correctAnswer = _quizWords[_currentIndex].englishWord;
+    String correct = _quizWords[_currentIndex].englishWord;
 
-    List<String> otherWords = box.values
-        .where((w) => w.domainName == _selectedDomain && w.englishWord != correctAnswer)
-        .map((w) => w.englishWord)
-        .toList();
+    List<String> others = box.values
+        .where((w) => w.domainName == _selectedDomain && w.englishWord != correct)
+        .map((w) => w.englishWord).toList();
 
-    otherWords.shuffle();
-
-    _currentOptions = otherWords.take(3).toList();
-    _currentOptions.add(correctAnswer);
-    _currentOptions.shuffle();
+    others.shuffle();
+    _options = others.take(3).toList();
+    _options.add(correct);
+    _options.shuffle();
   }
 
-  void _checkAnswer(String selected) {
-    if (selected == _quizWords[_currentIndex].englishWord) {
-      _score++;
-    }
-
-    if (_currentIndex < _quizWords.length - 1) {
-      setState(() {
-        _currentIndex++;
-        _generateOptions();
-      });
-    } else {
-      _showResult();
-    }
-  }
-
-  void _showResult() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("Quiz Completed!"),
-        content: Text("Your Score: $_score / ${_quizWords.length}"),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _quizStarted = false);
-            },
-            child: const Text("Finish"),
-          ),
-        ],
-      ),
-    );
+  void _handleAnswer(String option) {
+    if (_isAnswered) return;
+    setState(() {
+      _selectedOption = option;
+      _isAnswered = true;
+      if (option == _quizWords[_currentIndex].englishWord) _score++;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Technical Quiz")),
-      body: !_quizStarted ? _buildSetup() : _buildQuiz(),
+      body: !_quizStarted ? _buildSetup() : _buildQuizBody(),
     );
   }
 
   Widget _buildSetup() {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text("Select Domain:", style: TextStyle(fontSize: 18)),
+          const Text("Select Domain and Number of Questions"),
           DropdownButton<String>(
             value: _selectedDomain,
             isExpanded: true,
             items: _domains.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-            onChanged: (val) => setState(() => _selectedDomain = val!),
+            onChanged: (v) => setState(() => _selectedDomain = v!),
+          ),
+          TextField(
+            controller: _countController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: "Enter number of questions"),
           ),
           const SizedBox(height: 20),
-          const Text("Number of Questions:", style: TextStyle(fontSize: 18)),
-          Slider(
-            value: _questionCount.toDouble(),
-            min: 1, max: 10, divisions: 9,
-            label: _questionCount.toString(),
-            onChanged: (val) => setState(() => _questionCount = val.toInt()),
-          ),
-          const SizedBox(height: 40),
-          ElevatedButton(
-            onPressed: _startQuiz,
-            style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-            child: const Text("START QUIZ"),
-          )
+          ElevatedButton(onPressed: _startQuiz, child: const Text("START")),
         ],
       ),
     );
   }
 
-  Widget _buildQuiz() {
+  Widget _buildQuizBody() {
+    final current = _quizWords[_currentIndex];
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.all(20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Question ${_currentIndex + 1} of ${_quizWords.length}", style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 10),
-          Text(
-            "What is the definition of: \n'${_quizWords[_currentIndex].englishDef}'?",
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 30),
-          ..._currentOptions.map((option) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-              onPressed: () => _checkAnswer(option),
-              child: Text(option),
+          Text("Question ${_currentIndex + 1}/${_quizWords.length} | Score: $_score"),
+          const SizedBox(height: 20),
+          Text(current.englishDef, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          ..._options.map((opt) {
+            Color btnColor = Colors.blueGrey;
+            Widget? icon;
+
+            if (_isAnswered) {
+              if (opt == current.englishWord) {
+                btnColor = Colors.green;
+                icon = const Icon(Icons.check_circle, color: Colors.white); // Right Tick
+              } else if (opt == _selectedOption) {
+                btnColor = Colors.red;
+                icon = const Icon(Icons.cancel, color: Colors.white); // Wrong X
+              }
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: btnColor, minimumSize: const Size(double.infinity, 50)),
+                onPressed: () => _handleAnswer(opt),
+                icon: icon ?? const SizedBox(),
+                label: Text(opt, style: const TextStyle(color: Colors.white)),
+              ),
+            );
+          }),
+          if (_isAnswered)
+            Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: ElevatedButton(
+                onPressed: () {
+                  if (_currentIndex < _quizWords.length - 1) {
+                    setState(() { _currentIndex++; _isAnswered = false; _selectedOption = null; _generateOptions(); });
+                  } else {
+                    _showFinalResult();
+                  }
+                },
+                child: Text(_currentIndex < _quizWords.length - 1 ? "Next Question" : "View Result"),
+              ),
             ),
-          )),
         ],
       ),
     );
+  }
+
+  void _showFinalResult() {
+    showDialog(context: context, builder: (c) => AlertDialog(
+      title: const Text("Quiz Complete!"),
+      content: Text("Final Score: $_score out of ${_quizWords.length}"),
+      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text("Return Home"))],
+    ));
   }
 }
